@@ -149,6 +149,17 @@ select {
   gap: 10px;
 }
 
+.primary-action {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+  font-weight: 700;
+}
+
+.primary-action:hover {
+  border-color: #106846;
+}
+
 button {
   cursor: pointer;
   padding: 11px 14px;
@@ -361,6 +372,7 @@ h2 {
       </div>
 
       <div class="actions">
+        <button id="reviewWrongBtn" class="primary-action" type="button">错题重刷</button>
         <button id="shuffleBtn" type="button">随机顺序</button>
         <button id="resetBtn" type="button">清空记录</button>
       </div>
@@ -411,14 +423,25 @@ const questionStem = document.querySelector("#questionStem");
 const questionIndex = document.querySelector("#questionIndex");
 const optionsEl = document.querySelector("#options");
 const feedback = document.querySelector("#feedback");
+const reviewWrongBtn = document.querySelector("#reviewWrongBtn");
 
 function loadState() {
   try {
-    return JSON.parse(localStorage.getItem(storageKey)) || { answered: {}, wrong: {} };
+    return normalizeState(JSON.parse(localStorage.getItem(storageKey)));
   } catch {
     storageAvailable = false;
-    return { answered: {}, wrong: {} };
+    return normalizeState();
   }
+}
+
+function normalizeState(saved) {
+  return {
+    answered: saved?.answered || {},
+    wrong: saved?.wrong || {},
+    lastPosition: saved?.lastPosition || {},
+    lastMode: saved?.lastMode || "all",
+    lastChapter: saved?.lastChapter || "全部章节"
+  };
 }
 
 function saveState() {
@@ -434,15 +457,17 @@ function init() {
   questionTotal.textContent = `${QUESTIONS.length} 道题`;
   const chapters = ["全部章节", ...new Set(QUESTIONS.map(q => q.chapter))];
   chapterSelect.innerHTML = chapters.map(ch => `<option value="${ch}">${ch}</option>`).join("");
-  rebuildPool();
+  restoreLastContext();
+  rebuildPool(true);
   bindEvents();
   render();
 }
 
 function bindEvents() {
   chapterSelect.addEventListener("change", () => {
+    saveCurrentPosition();
     cursor = 0;
-    rebuildPool();
+    rebuildPool(true);
     render();
   });
 
@@ -450,26 +475,67 @@ function bindEvents() {
   modeWrong.addEventListener("click", () => setMode("wrong"));
   document.querySelector("#prevBtn").addEventListener("click", () => move(-1));
   document.querySelector("#nextBtn").addEventListener("click", () => move(1));
+  reviewWrongBtn.addEventListener("click", reviewWrongQuestions);
   document.querySelector("#shuffleBtn").addEventListener("click", shufflePool);
   document.querySelector("#resetBtn").addEventListener("click", resetRecords);
 }
 
 function setMode(nextMode) {
+  saveCurrentPosition();
   mode = nextMode;
   modeAll.classList.toggle("active", mode === "all");
   modeWrong.classList.toggle("active", mode === "wrong");
   cursor = 0;
-  rebuildPool();
+  rebuildPool(true);
   render();
 }
 
-function rebuildPool() {
+function rebuildPool(restorePosition = false) {
   const chapter = chapterSelect.value || "全部章节";
   pool = QUESTIONS.filter(q => chapter === "全部章节" || q.chapter === chapter);
   if (mode === "wrong") {
     pool = pool.filter(q => state.wrong[q.id]);
   }
+  if (restorePosition) {
+    restoreCursor();
+  }
   cursor = Math.min(cursor, Math.max(pool.length - 1, 0));
+}
+
+function positionKey() {
+  const chapter = chapterSelect.value || "全部章节";
+  return `${mode}::${chapter}`;
+}
+
+function saveCurrentPosition() {
+  if (!pool.length) return;
+  const q = pool[cursor];
+  if (!q) return;
+  state.lastPosition[positionKey()] = q.id;
+  state.lastMode = mode;
+  state.lastChapter = chapterSelect.value || "全部章节";
+  saveState();
+}
+
+function restoreLastContext() {
+  const chapters = Array.from(chapterSelect.options).map(option => option.value);
+  if (chapters.includes(state.lastChapter)) {
+    chapterSelect.value = state.lastChapter;
+  }
+  if (state.lastMode === "wrong" && Object.keys(state.wrong).length) {
+    mode = "wrong";
+    modeAll.classList.remove("active");
+    modeWrong.classList.add("active");
+  }
+}
+
+function restoreCursor() {
+  const lastQuestionId = state.lastPosition[positionKey()];
+  if (!lastQuestionId) return;
+  const lastIndex = pool.findIndex(q => q.id === lastQuestionId);
+  if (lastIndex >= 0) {
+    cursor = lastIndex;
+  }
 }
 
 function render() {
@@ -486,6 +552,7 @@ function render() {
   }
 
   const q = pool[cursor];
+  saveCurrentPosition();
   const record = state.answered[q.id];
   chapterName.textContent = q.chapter;
   questionStem.textContent = `${q.number}、${q.stem}`;
@@ -526,7 +593,8 @@ function chooseAnswer(q, key) {
     renderStats();
     setTimeout(() => {
       rebuildPool();
-      if (pool.length) cursor = Math.min(cursor + 1, pool.length - 1);
+      if (pool.length && mode !== "wrong") cursor = Math.min(cursor + 1, pool.length - 1);
+      saveCurrentPosition();
       render();
     }, 260);
     return;
@@ -558,6 +626,7 @@ function renderStats() {
 function move(step) {
   if (!pool.length) return;
   cursor = (cursor + step + pool.length) % pool.length;
+  saveCurrentPosition();
   render();
 }
 
@@ -567,13 +636,36 @@ function shufflePool() {
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   cursor = 0;
+  saveCurrentPosition();
   render();
+}
+
+function reviewWrongQuestions() {
+  const chapter = chapterSelect.value || "全部章节";
+  const wrongIds = QUESTIONS
+    .filter(q => chapter === "全部章节" || q.chapter === chapter)
+    .filter(q => state.wrong[q.id])
+    .map(q => q.id);
+
+  if (!wrongIds.length) {
+    setMode("wrong");
+    feedback.hidden = false;
+    feedback.textContent = "现在还没有可以重刷的错题。";
+    return;
+  }
+
+  wrongIds.forEach(id => {
+    delete state.answered[id];
+  });
+  saveState();
+  setMode("wrong");
+  shufflePool();
 }
 
 function resetRecords() {
   const shouldReset = window.confirm ? confirm("确定清空答题记录和错题本吗？") : true;
   if (!shouldReset) return;
-  state = { answered: {}, wrong: {} };
+  state = { answered: {}, wrong: {}, lastPosition: {}, lastMode: "all", lastChapter: "全部章节" };
   saveState();
   rebuildPool();
   render();
