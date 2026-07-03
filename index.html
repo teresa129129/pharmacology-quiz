@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>药理学刷题</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">药</span>
+        <div>
+          <h1>药理学刷题</h1>
+          <p id="questionTotal">题库加载中</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>章节</span>
+        <select id="chapterSelect"></select>
+      </label>
+
+      <div class="segmented" role="tablist" aria-label="刷题模式">
+        <button id="modeAll" class="active" type="button">全部</button>
+        <button id="modeWrong" type="button">错题本</button>
+      </div>
+
+      <div class="stats">
+        <div><strong id="doneCount">0</strong><span>已答</span></div>
+        <div><strong id="correctCount">0</strong><span>正确</span></div>
+        <div><strong id="wrongCount">0</strong><span>错题</span></div>
+      </div>
+
+      <div class="actions">
+        <button id="shuffleBtn" type="button">随机顺序</button>
+        <button id="resetBtn" type="button">清空记录</button>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <div class="topbar">
+        <div>
+          <p id="chapterName" class="chapter"></p>
+          <h2 id="questionStem"></h2>
+        </div>
+        <span id="questionIndex" class="pill"></span>
+      </div>
+
+      <div id="options" class="options"></div>
+
+      <div id="feedback" class="feedback" hidden></div>
+
+      <div class="bottom">
+        <button id="prevBtn" type="button">上一题</button>
+        <button id="nextBtn" type="button">下一题</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="questions.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
